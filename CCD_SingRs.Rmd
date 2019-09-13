@@ -1,0 +1,559 @@
+---
+title: "Credit_cards_defaults"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if("pacman" %in% rownames(installed.packages()) == FALSE) {install.packages("pacman")} 
+pacman::p_load("xlsx","caret","ROCR","lift","glmnet","MASS","e1071", "randomForest", "xgboost", "party", "partykit","ROCR","lift","rpart","e1071", "readxl", "tibble", "plotly", "scales") 
+library("readxl")
+library("tibble")
+library("plotly")
+library("scales")
+```
+\pagebreak
+#Setting the data
+##Loading the data
+CCDdata_A is training dataset with 24000 observations.
+CCDdata_B is dataset, where we need to predict which customer would default on the credit and which not.
+```{r data_loading}
+CCDdata_A <- read_excel("DSB A2 -- credit data.xlsx", sheet =1, col_names = TRUE, na = '')
+CCDdata_B <- read_excel("DSB A2 - new applications.xlsx", sheet =1, col_names = TRUE, na = '')
+str(CCDdata_A)
+str(CCDdata_B)
+table(CCDdata_A$default_0)
+```
+
+##Fixing columns
+```{r data_corrections}
+CCDdata_A$EDUCATION[CCDdata_A$EDUCATION == 0] <- 5
+CCDdata_A$EDUCATION[CCDdata_A$EDUCATION == 6] <- 5
+CCDdata_B$EDUCATION[CCDdata_B$EDUCATION == 0] <- 5
+CCDdata_B$EDUCATION[CCDdata_B$EDUCATION == 6] <- 5
+
+
+CCDdata_A$PAY_NONEED_1 = 0
+CCDdata_A$PAY_FULL_1 = 0
+CCDdata_A$PAY_ROLLING_1 = 0
+CCDdata_A$PAY_NONEED_1[CCDdata_A$PAY_1 == -2] <- 1
+CCDdata_A$PAY_FULL_1[CCDdata_A$PAY_1 == -1] <- 1
+CCDdata_A$PAY_ROLLING_1[CCDdata_A$PAY_1 == 0] <- 1
+CCDdata_A$PAY_1[CCDdata_A$PAY_1 == -2] <- 0
+CCDdata_A$PAY_1[CCDdata_A$PAY_1 == -1] <- 0
+
+CCDdata_A$PAY_NONEED_2 = 0
+CCDdata_A$PAY_FULL_2 = 0
+CCDdata_A$PAY_ROLLING_2 = 0
+CCDdata_A$PAY_NONEED_2[CCDdata_A$PAY_2 == -2] <- 1
+CCDdata_A$PAY_FULL_2[CCDdata_A$PAY_2 == -1] <- 1
+CCDdata_A$PAY_ROLLING_2[CCDdata_A$PAY_2 == 0] <- 1
+CCDdata_A$PAY_2[CCDdata_A$PAY_2 == -2] <- 0
+CCDdata_A$PAY_2[CCDdata_A$PAY_2 == -1] <- 0
+
+CCDdata_A$PAY_NONEED_3 = 0
+CCDdata_A$PAY_FULL_3 = 0
+CCDdata_A$PAY_ROLLING_3 = 0
+CCDdata_A$PAY_NONEED_3[CCDdata_A$PAY_3 == -2] <- 1
+CCDdata_A$PAY_FULL_3[CCDdata_A$PAY_3 == -1] <- 1
+CCDdata_A$PAY_ROLLING_3[CCDdata_A$PAY_3 == 0] <- 1
+CCDdata_A$PAY_3[CCDdata_A$PAY_3 == -2] <- 0
+CCDdata_A$PAY_3[CCDdata_A$PAY_3 == -1] <- 0
+
+CCDdata_A$PAY_NONEED_4 = 0
+CCDdata_A$PAY_FULL_4 = 0
+CCDdata_A$PAY_ROLLING_4 = 0
+CCDdata_A$PAY_NONEED_4[CCDdata_A$PAY_4 == -2] <- 1
+CCDdata_A$PAY_FULL_4[CCDdata_A$PAY_4 == -1] <- 1
+CCDdata_A$PAY_ROLLING_4[CCDdata_A$PAY_4 == 0] <- 1
+CCDdata_A$PAY_4[CCDdata_A$PAY_4 == -2] <- 0
+CCDdata_A$PAY_4[CCDdata_A$PAY_4 == -1] <- 0
+
+CCDdata_A$PAY_NONEED_5 = 0
+CCDdata_A$PAY_FULL_5 = 0
+CCDdata_A$PAY_ROLLING_5 = 0
+CCDdata_A$PAY_NONEED_5[CCDdata_A$PAY_5 == -2] <- 1
+CCDdata_A$PAY_FULL_5[CCDdata_A$PAY_5 == -1] <- 1
+CCDdata_A$PAY_ROLLING_5[CCDdata_A$PAY_5 == 0] <- 1
+CCDdata_A$PAY_5[CCDdata_A$PAY_5 == -2] <- 0
+CCDdata_A$PAY_5[CCDdata_A$PAY_5 == -1] <- 0
+
+CCDdata_A$PAY_NONEED_6 = 0
+CCDdata_A$PAY_FULL_6 = 0
+CCDdata_A$PAY_ROLLING_6 = 0
+CCDdata_A$PAY_NONEED_6[CCDdata_A$PAY_6 == -2] <- 1
+CCDdata_A$PAY_FULL_6[CCDdata_A$PAY_6 == -1] <- 1
+CCDdata_A$PAY_ROLLING_6[CCDdata_A$PAY_6 == 0] <- 1
+CCDdata_A$PAY_6[CCDdata_A$PAY_6 == -2] <- 0
+CCDdata_A$PAY_6[CCDdata_A$PAY_6 == -1] <- 0
+
+
+CCDdata_B$PAY_NONEED_1 = 0
+CCDdata_B$PAY_FULL_1 = 0
+CCDdata_B$PAY_ROLLING_1 = 0
+CCDdata_B$PAY_NONEED_1[CCDdata_B$PAY_1 == -2] <- 1
+CCDdata_B$PAY_FULL_1[CCDdata_B$PAY_1 == -1] <- 1
+CCDdata_B$PAY_ROLLING_1[CCDdata_B$PAY_1 == 0] <- 1
+CCDdata_B$PAY_1[CCDdata_B$PAY_1 == -2] <- 0
+CCDdata_B$PAY_1[CCDdata_B$PAY_1 == -1] <- 0
+
+CCDdata_B$PAY_NONEED_2 = 0
+CCDdata_B$PAY_FULL_2 = 0
+CCDdata_B$PAY_ROLLING_2 = 0
+CCDdata_B$PAY_NONEED_2[CCDdata_B$PAY_2 == -2] <- 1
+CCDdata_B$PAY_FULL_2[CCDdata_B$PAY_2 == -1] <- 1
+CCDdata_B$PAY_ROLLING_2[CCDdata_B$PAY_2 == 0] <- 1
+CCDdata_B$PAY_2[CCDdata_B$PAY_2 == -2] <- 0
+CCDdata_B$PAY_2[CCDdata_B$PAY_2 == -1] <- 0
+
+CCDdata_B$PAY_NONEED_3 = 0
+CCDdata_B$PAY_FULL_3 = 0
+CCDdata_B$PAY_ROLLING_3 = 0
+CCDdata_B$PAY_NONEED_3[CCDdata_B$PAY_3 == -2] <- 1
+CCDdata_B$PAY_FULL_3[CCDdata_B$PAY_3 == -1] <- 1
+CCDdata_B$PAY_ROLLING_3[CCDdata_B$PAY_3 == 0] <- 1
+CCDdata_B$PAY_3[CCDdata_B$PAY_3 == -2] <- 0
+CCDdata_B$PAY_3[CCDdata_B$PAY_3 == -1] <- 0
+
+CCDdata_B$PAY_NONEED_4 = 0
+CCDdata_B$PAY_FULL_4 = 0
+CCDdata_B$PAY_ROLLING_4 = 0
+CCDdata_B$PAY_NONEED_4[CCDdata_B$PAY_4 == -2] <- 1
+CCDdata_B$PAY_FULL_4[CCDdata_B$PAY_4 == -1] <- 1
+CCDdata_B$PAY_ROLLING_4[CCDdata_B$PAY_4 == 0] <- 1
+CCDdata_B$PAY_4[CCDdata_B$PAY_4 == -2] <- 0
+CCDdata_B$PAY_4[CCDdata_B$PAY_4 == -1] <- 0
+
+CCDdata_B$PAY_NONEED_5 = 0
+CCDdata_B$PAY_FULL_5 = 0
+CCDdata_B$PAY_ROLLING_5 = 0
+CCDdata_B$PAY_NONEED_5[CCDdata_B$PAY_5 == -2] <- 1
+CCDdata_B$PAY_FULL_5[CCDdata_B$PAY_5 == -1] <- 1
+CCDdata_B$PAY_ROLLING_5[CCDdata_B$PAY_5 == 0] <- 1
+CCDdata_B$PAY_5[CCDdata_B$PAY_5 == -2] <- 0
+CCDdata_B$PAY_5[CCDdata_B$PAY_5 == -1] <- 0
+
+CCDdata_B$PAY_NONEED_6 = 0
+CCDdata_B$PAY_FULL_6 = 0
+CCDdata_B$PAY_ROLLING_6 = 0
+CCDdata_B$PAY_NONEED_6[CCDdata_B$PAY_6 == -2] <- 1
+CCDdata_B$PAY_FULL_6[CCDdata_B$PAY_6 == -1] <- 1
+CCDdata_B$PAY_ROLLING_6[CCDdata_B$PAY_6 == 0] <- 1
+CCDdata_B$PAY_6[CCDdata_B$PAY_6 == -2] <- 0
+CCDdata_B$PAY_6[CCDdata_B$PAY_6 == -1] <- 0
+
+str(CCDdata_A)
+str(CCDdata_B)
+
+```
+
+##Fixing data from numeric to factors
+Fixing classificaiton of datasets A and B
+```{r data_asfactors}
+
+#DATASET_A
+CCDdata_A$ID<-NULL
+CCDdata_A$SEX <- as.factor(CCDdata_A$SEX)
+CCDdata_A$EDUCATION <- as.factor(CCDdata_A$EDUCATION)
+#CCDdata_A$AGE <- as.integer(CCDdata_A$AGE)
+CCDdata_A$MARRIAGE <- as.factor(CCDdata_A$MARRIAGE)
+CCDdata_A$LIMIT_BAL <- as.integer(CCDdata_A$LIMIT_BAL)
+CCDdata_A$default_0 <- as.factor(CCDdata_A$default_0)
+
+CCDdata_A$PAY_NONEED_1 <- as.integer(CCDdata_A$PAY_NONEED_1)
+CCDdata_A$PAY_NONEED_2 <- as.integer(CCDdata_A$PAY_NONEED_2)
+CCDdata_A$PAY_NONEED_3 <- as.integer(CCDdata_A$PAY_NONEED_3)
+CCDdata_A$PAY_NONEED_4 <- as.integer(CCDdata_A$PAY_NONEED_4)
+CCDdata_A$PAY_NONEED_5 <- as.integer(CCDdata_A$PAY_NONEED_5)
+CCDdata_A$PAY_NONEED_6 <- as.integer(CCDdata_A$PAY_NONEED_6)
+
+CCDdata_A$PAY_FULL_1 <- as.integer(CCDdata_A$PAY_FULL_1)
+CCDdata_A$PAY_FULL_2 <- as.integer(CCDdata_A$PAY_FULL_2)
+CCDdata_A$PAY_FULL_3 <- as.integer(CCDdata_A$PAY_FULL_3)
+CCDdata_A$PAY_FULL_4 <- as.integer(CCDdata_A$PAY_FULL_4)
+CCDdata_A$PAY_FULL_5 <- as.integer(CCDdata_A$PAY_FULL_5)
+CCDdata_A$PAY_FULL_6 <- as.integer(CCDdata_A$PAY_FULL_6)
+
+CCDdata_A$PAY_ROLLING_1 <- as.integer(CCDdata_A$PAY_ROLLING_1)
+CCDdata_A$PAY_ROLLING_2 <- as.integer(CCDdata_A$PAY_ROLLING_2)
+CCDdata_A$PAY_ROLLING_3 <- as.integer(CCDdata_A$PAY_ROLLING_3)
+CCDdata_A$PAY_ROLLING_4 <- as.integer(CCDdata_A$PAY_ROLLING_4)
+CCDdata_A$PAY_ROLLING_5 <- as.integer(CCDdata_A$PAY_ROLLING_5)
+CCDdata_A$PAY_ROLLING_6 <- as.integer(CCDdata_A$PAY_ROLLING_6)
+# 
+CCDdata_A$PAY_1 <- as.integer(CCDdata_A$PAY_1)
+CCDdata_A$PAY_2 <- as.integer(CCDdata_A$PAY_2)
+CCDdata_A$PAY_3 <- as.integer(CCDdata_A$PAY_3)
+CCDdata_A$PAY_4 <- as.integer(CCDdata_A$PAY_4)
+CCDdata_A$PAY_5 <- as.integer(CCDdata_A$PAY_5)
+CCDdata_A$PAY_6 <- as.integer(CCDdata_A$PAY_6)
+
+#DATASET_B
+CCDdata_B$ID <- NULL
+CCDdata_B$SEX <- as.factor(CCDdata_B$SEX)
+CCDdata_B$EDUCATION <- as.factor(CCDdata_B$EDUCATION)
+#CCDdata_B$AGE <- as.integer(CCDdata_B$AGE)
+CCDdata_B$MARRIAGE <- as.factor(CCDdata_B$MARRIAGE)
+CCDdata_B$LIMIT_BAL <- as.integer(CCDdata_B$LIMIT_BAL)
+
+CCDdata_B$PAY_NONEED_1 <- as.integer(CCDdata_B$PAY_NONEED_1)
+CCDdata_B$PAY_NONEED_2 <- as.integer(CCDdata_B$PAY_NONEED_2)
+CCDdata_B$PAY_NONEED_3 <- as.integer(CCDdata_B$PAY_NONEED_3)
+CCDdata_B$PAY_NONEED_4 <- as.integer(CCDdata_B$PAY_NONEED_4)
+CCDdata_B$PAY_NONEED_5 <- as.integer(CCDdata_B$PAY_NONEED_5)
+CCDdata_B$PAY_NONEED_6 <- as.integer(CCDdata_B$PAY_NONEED_6)
+
+CCDdata_B$PAY_FULL_1 <- as.integer(CCDdata_B$PAY_FULL_1)
+CCDdata_B$PAY_FULL_2 <- as.integer(CCDdata_B$PAY_FULL_2)
+CCDdata_B$PAY_FULL_3 <- as.integer(CCDdata_B$PAY_FULL_3)
+CCDdata_B$PAY_FULL_4 <- as.integer(CCDdata_B$PAY_FULL_4)
+CCDdata_B$PAY_FULL_5 <- as.integer(CCDdata_B$PAY_FULL_5)
+CCDdata_B$PAY_FULL_6 <- as.integer(CCDdata_B$PAY_FULL_6)
+
+CCDdata_B$PAY_ROLLING_1 <- as.integer(CCDdata_B$PAY_ROLLING_1)
+CCDdata_B$PAY_ROLLING_2 <- as.integer(CCDdata_B$PAY_ROLLING_2)
+CCDdata_B$PAY_ROLLING_3 <- as.integer(CCDdata_B$PAY_ROLLING_3)
+CCDdata_B$PAY_ROLLING_4 <- as.integer(CCDdata_B$PAY_ROLLING_4)
+CCDdata_B$PAY_ROLLING_5 <- as.integer(CCDdata_B$PAY_ROLLING_5)
+CCDdata_B$PAY_ROLLING_6 <- as.integer(CCDdata_B$PAY_ROLLING_6)
+ 
+CCDdata_B$PAY_1 <- as.integer(CCDdata_B$PAY_1)
+CCDdata_B$PAY_2 <- as.integer(CCDdata_B$PAY_2)
+CCDdata_B$PAY_3 <- as.integer(CCDdata_B$PAY_3)
+CCDdata_B$PAY_4 <- as.integer(CCDdata_B$PAY_4)
+CCDdata_B$PAY_5 <- as.integer(CCDdata_B$PAY_5)
+CCDdata_B$PAY_6 <- as.integer(CCDdata_B$PAY_6)
+
+
+levels(CCDdata_B$PAY_1) <- levels(CCDdata_A$PAY_1)
+levels(CCDdata_B$PAY_2) <- levels(CCDdata_A$PAY_2)
+levels(CCDdata_B$PAY_3) <- levels(CCDdata_A$PAY_3)
+levels(CCDdata_B$PAY_4) <- levels(CCDdata_A$PAY_4)
+levels(CCDdata_B$PAY_5) <- levels(CCDdata_A$PAY_5)
+levels(CCDdata_B$PAY_6) <- levels(CCDdata_A$PAY_6)
+
+```
+
+##Data partition
+```{r data_partition}
+set.seed(77850) 
+# set.seed(616) 
+#set.seed(1937) 
+inTrain <- createDataPartition(y = CCDdata_A$default_0, p=(1-(1001/24000)), list = FALSE)
+training <- CCDdata_A[ inTrain,]
+testing <- CCDdata_A[ -inTrain,]
+```
+
+\pagebreak
+#First model - glm
+```{r glm}
+start_time <- Sys.time()
+model_logistic_glm <- glm(default_0~., data=training, family="binomial"(link="logit"))
+summary(model_logistic_glm)
+end_time <- Sys.time()
+end_time - start_time
+```
+
+```{r glm_steps}
+start_time <- Sys.time()
+model_logistic_stepwiseAIC<-stepAIC(model_logistic_glm,direction = c("both"),trace = 1) #AIC stepwise
+summary(model_logistic_stepwiseAIC)
+end_time <- Sys.time()
+end_time - start_time
+```
+
+```{r glm_plots}
+par(mfrow=c(1,4))
+plot(model_logistic_stepwiseAIC)
+par(mfrow=c(1,1))
+```
+
+##GLM model prediction
+
+Predict classification using 0.7789167 threshold. 
+0.7789167 - that's the average probability of not defaulting in the data. 
+An alternative code: logistic_classification <- as.integer(logistic_probabilities > mean(testing$Default.0 == "1"))
+
+```{r glm_predictions}
+logistic_probabilities<-predict(model_logistic_stepwiseAIC,newdata=testing,type="response") 
+logistic_classification<-rep("0",length(testing$default_0))
+logistic_classification[logistic_probabilities>1-0.7789167]="1"
+logistic_classification<-as.factor(logistic_classification)
+```
+
+##GLM Confusion matrix
+```{r glm_confusion_matrix}
+glm_cm<-confusionMatrix(logistic_classification, testing$default_0, positive = "1")
+glm_cm
+```
+
+##GLM ROC Curve
+```{r glm_ROC}
+logistic_ROC_prediction <- prediction(logistic_probabilities, testing$default_0)
+logistic_ROC <- performance(logistic_ROC_prediction,"tpr","fpr") 
+plot(logistic_ROC)
+```
+
+##GLM AUC (area under curve)
+Create AUC data
+Calculate AUC
+Display AUC value: 90+% - excellent, 80-90% - very good, 70-80% - good, 60-70% - so so, below 60% - not much value
+```{r glm_AUC}
+auc.tmp <- performance(logistic_ROC_prediction,"auc")
+logistic_auc_testing <- as.numeric(auc.tmp@y.values)
+logistic_auc_testing
+```
+
+##GLM Lift chart
+```{r glm_plotLift}
+plotLift(logistic_probabilities, testing$default_0, cumulative = TRUE, n.buckets = 10)
+```
+
+\pagebreak
+#CTREE
+Plotting the tree (adjust fontsize if needed)
+Predict probabilities
+
+```{r ctree}
+ctree_tree<-ctree(default_0~.,data=training) 
+plot(ctree_tree, gp = gpar(fontsize = 8)) 
+ctree_probabilities<-predict(ctree_tree,newdata=testing,type="prob")
+ctree_classification<-rep("0",length(testing$default_0))
+ctree_classification[ctree_probabilities[,2]>1-0.7789167]="1" 
+ctree_classification<-as.factor(ctree_classification)
+```
+
+##CTREE confustion matrix
+```{r ctree_confusion_matrix}
+ctree_cm<-confusionMatrix(ctree_classification, testing$default_0,positive = "1")
+ctree_cm
+```
+
+##Predict probabilities and calculate errors
+```{r rpart_prediction_prob}
+ctree_probabilities_testing <-predict(ctree_tree,newdata=testing,type = "prob")
+ctree_pred_testing <- prediction(ctree_probabilities_testing[,2], testing$default_0)
+```
+
+##ROC
+```{r rpart_roc}
+ctree_ROC_testing <- performance(ctree_pred_testing,"tpr","fpr")
+plot(ctree_ROC_testing)
+```
+
+##AUC
+```{r rpart_auc}
+ctree_auc.tmp <- performance(ctree_pred_testing,"auc") 
+ctree_auc_testing <- as.numeric(ctree_auc.tmp@y.values)
+ctree_auc_testing
+```
+
+\pagebreak
+# RPART
+The rpart method has an important "complexity parameter", cp, which determines how big the tree is.  
+Run ctree on training data
+Understand the relationship between the error and cp
+As a rule of thumb pick up the largest cp which does not give a substantial drop in error
+Prun the tree. Play with cp to see how the result and tree changes
+Plotting the tree (adjust fontsize if needed)
+```{r rpart}
+CART_cp = rpart.control(cp = 0.0005)
+rpart_tree<-rpart(default_0~.,data=training, method="class", control=CART_cp)
+printcp(rpart_tree) 
+plotcp(rpart_tree)
+prunned_rpart_tree<-prune(rpart_tree, cp=0.001)
+plot(as.party(prunned_rpart_tree), type = "extended",gp = gpar(fontsize = 7))
+```
+
+Predict classification (for confusion matrix)
+```{r rpart_prediction}
+rpart_prediction_class<-predict(prunned_rpart_tree,newdata=testing, type="class")
+```
+##Confusion matrix
+```{r rpart_cm}
+rpart_cm<-confusionMatrix(rpart_prediction_class,testing$default_0,positive = "1")
+rpart_cm
+```
+
+##Predict probabilities and calculate errors
+```{r rpart_prediction_prob}
+rpart_probabilities_testing <-predict(prunned_rpart_tree,newdata=testing,type = "prob")
+rpart_pred_testing <- prediction(rpart_probabilities_testing[,2], testing$default_0)
+```
+
+##ROC
+```{r rpart_roc}
+rpart_ROC_testing <- performance(rpart_pred_testing,"tpr","fpr")
+plot(rpart_ROC_testing)
+```
+
+##AUC
+```{r rpart_auc}
+auc.tmp <- performance(rpart_pred_testing,"auc") 
+rpart_auc_testing <- as.numeric(auc.tmp@y.values)
+rpart_auc_testing
+```
+
+##Lift
+```{r rpart_lift}
+plotLift(rpart_prediction_class,  testing$default_0, cumulative = TRUE, n.buckets = 10)
+```
+
+
+\pagebreak
+#Random Forest
+cutoffs need to be determined for class 0 and class 1. By default 50/50, but need not be those necessarily
+
+```{r random_forest}
+start_time <- Sys.time()
+memory.limit(10* 10^10)
+model_forest <- randomForest(default_0~ ., data=training, importance=TRUE,proximity=TRUE, type="classification")
+print(model_forest)
+end_time <- Sys.time()
+end_time - start_time
+
+plot(model_forest)
+importance(model_forest)
+varImpPlot(model_forest)
+```
+
+##Random forest predictions
+Finding predicitons: probabilities and classification
+Predict probabilities -- an array with 2 columns: for not defaulted (class 0) and for defaulted (class 1)
+
+```{r rf_predictions}
+forest_probabilities<-predict(model_forest,newdata=testing,type="prob") 
+forest_classification<-rep("0",length(testing$default_0))
+forest_classification[forest_probabilities[,2]>0.5]="1"
+forest_classification<-as.factor(forest_classification)
+```
+
+## RF Confusion matrix
+Display confusion matrix. Note, confusion matrix actually displays a better accuracy with threshold of 50%
+```{r rf_cf}
+rf_cm<-confusionMatrix(forest_classification,testing$default_0, positive="1")
+rf_cm
+```
+
+##ROC Curve
+```{r rf_roc}
+forest_ROC_prediction <- prediction(forest_probabilities[,2], testing$default_0)
+forest_ROC <- performance(forest_ROC_prediction,"tpr","fpr")
+plot(forest_ROC)
+```
+
+##AUC (area under curve)
+```{r rf_auc}
+AUC.tmp <- performance(forest_ROC_prediction,"auc") 
+forest_AUC <- as.numeric(AUC.tmp@y.values) 
+forest_AUC 
+```
+
+##Lift chart
+```{r rf_lift}
+plotLift(forest_probabilities[,2],  testing$default_0, cumulative = TRUE, n.buckets = 10)
+```
+
+
+\pagebreak
+#xgboost
+```{r xgboost}
+start_time <- Sys.time()
+
+training.x <-model.matrix(default_0~ ., data = training)
+testing.x <-model.matrix(default_0~ ., data = testing)
+
+model_XGboost<-xgboost(data = data.matrix(training.x[,-1]), 
+                       label = as.numeric(as.character(training$default_0)), 
+                       eta = 0.1,
+                       max_depth = 20, 
+                       nround=50, 
+                       objective = "binary:logistic")
+end_time <- Sys.time()
+end_time - start_time
+```
+
+##Predict classification (for confusion matrix)
+```{r xgb_predictions}
+XGboost_prediction<-predict(model_XGboost,newdata=testing.x[,-1], type="response") 
+```
+
+###Display confusion matrix
+```{r xgb_cm}
+xgb_cm<-confusionMatrix(as.factor(ifelse(XGboost_prediction>0.7789167,1,0)),testing$default_0,positive="1")
+xgb_cm
+```
+##ROC Curve
+```{r xgb_roc}
+XGboost_pred_testing <- prediction(XGboost_prediction, testing$default_0) 
+XGboost_ROC_testing <- performance(XGboost_pred_testing,"tpr","fpr")
+plot(XGboost_ROC_testing)
+```
+##AUC
+```{r xgb_auc}
+auc.tmp <- performance(XGboost_pred_testing,"auc")
+XGboost_auc_testing <- as.numeric(auc.tmp@y.values)
+XGboost_auc_testing 
+```
+##Lift chart
+```{r xgb_lc}
+plotLift(XGboost_prediction, testing$default_0, cumulative = TRUE, n.buckets = 10) # Plot Lift chart
+```
+
+\pagebreak
+#Choosing best model by comparing accuracy from all confusion matricies
+```{r best_model}
+best_cm <- data.frame("Model"=c("glm","rpart","ctree","Random Forest","xgboost"),
+                      "Accuracy"=c(glm_cm$overall[1],rpart_cm$overall[1],ctree_cm$overall[1],rf_cm$overall[1],xgb_cm$overall[1]),
+                      "Sensitivity"=c(glm_cm$byClass[1],rpart_cm$byClass[1],ctree_cm$byClass[1],rf_cm$byClass[1],xgb_cm$byClass[1]),
+                      "Specificity"=c(glm_cm$byClass[2],rpart_cm$byClass[2],ctree_cm$byClass[2],rf_cm$byClass[2],xgb_cm$byClass[2]))
+
+
+plot_ly(x=best_cm$Model, y=best_cm$Accuracy, type="bar", text = percent(best_cm$Accuracy), textposition = 'outside')%>%
+        layout(yaxis = list(range = c(0.789, 0.85)))
+
+plot_ly(x=best_cm$Model, y=best_cm$Sensitivity, type="bar", text = percent(best_cm$Sensitivity), textposition = 'outside')%>%
+        layout(yaxis = list(range = c(0, 0.40)))
+
+plot_ly(x=best_cm$Model, y=best_cm$Specificity, type="bar", text = percent(best_cm$Specificity), textposition = 'outside')%>%
+        layout(yaxis = list(range = c(0.90, 1.02)))
+
+```
+
+
+#Applying best model on new data
+Creating dataset with one column - assuming that Random Forest is our best model
+```{r best_model_application}
+
+stepaic_new_predictions <-predict(model_logistic_stepwiseAIC,newdata=CCDdata_B,type="response") 
+ctree_new_predictions <- predict(ctree_tree,newdata=CCDdata_B,type="prob")
+
+```
+
+#Calculating potential profit
+
+In other words, for each client in the pilot, if the credit is issued and repaid, then the bank earns a profit of 25,000*2% + 1,000 = 1,500;
+
+if the credit is granted but the client defaults, then the bank loses 25,000 - 20,000 = 5,000?
+
+And if the credit is not issued, then the profit=loss=0.
+
+
+Outputs
+Positive (PPV) and negative (NPV) predictive values for given inputs; and
+Table and plot of PPV and NPV for given sensitivity and specificity values and varying prior probability of infection.
+Formulae
+PPV = p x Se/(p x Se + (1 - p) x (1 - Sp)) 
+NPV = (1 - p) x Sp/((1 - p) x Sp + p x (1 - Se))
+
+where: 
+p = Prior probability of infection
+Se = Test unit sensitivity
+Sp = Test unit specificity
+
+```{r profit}
+
+profit <- sum(defaults_predictions[,2] <= 0.7789167)*1500 - sum(defaults_predictions[,2] > 0.7789167)*5000
+profit
+
+```
